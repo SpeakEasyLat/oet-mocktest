@@ -48,10 +48,18 @@
   async function api(action, extra = {}) {
     const body = { action, token: S.token, ...extra };
     let res;
-    try {
-      res = await fetch(FN, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ANON}`, apikey: ANON }, body: JSON.stringify(body) });
-    } catch {
-      throw Object.assign(new Error('No pudimos conectar con el servidor. Revisa tu conexión.'), { network: true });
+    // Tiempo máximo de 15 s por llamada y hasta 3 intentos automáticos (25/09/2026).
+    for (let i = 0; i < 3; i++) {
+      const ctl = new AbortController(); const tm = setTimeout(() => ctl.abort(), 15000);
+      try {
+        res = await fetch(FN, { method: 'POST', signal: ctl.signal, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ANON}`, apikey: ANON }, body: JSON.stringify(body) });
+        clearTimeout(tm);
+        if (res.status < 500 || i === 2) break;
+      } catch {
+        clearTimeout(tm);
+        if (i === 2) throw Object.assign(new Error('No pudimos conectar con el servidor. Revisa tu conexión.'), { network: true });
+      }
+      await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
     }
     const data = await res.json().catch(() => ({}));
     if (res.status === 401 && data.code === 'SESSION' && S.code && action !== 'login') {
