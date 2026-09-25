@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panel OET Full Mock Test · ClearPath</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/mock.css">
+<link rel="icon" href="data:,">
+<style>
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .field label{display:block;font-size:13px;font-weight:600;color:var(--teal-900);margin-bottom:4px}
+  .field input{width:100%}
+  table.list{width:100%;border-collapse:collapse;font-size:14px}
+  table.list th{background:var(--tint);color:var(--teal-900);text-align:left;padding:8px}
+  table.list td{border-bottom:1px solid var(--line);padding:8px;vertical-align:top}
+  .code{font-family:monospace;font-weight:700;color:var(--teal-700)}
+  .ok{background:#e7f4e8;border-left:4px solid var(--good);padding:12px 14px;border-radius:6px;margin-top:12px}
+  .err{color:var(--bad);margin-top:10px}
+  .linkbtn{background:none;border:0;color:var(--teal-700);font:inherit;font-weight:600;cursor:pointer;padding:0;text-decoration:underline}
+  @media (max-width:760px){.grid2{grid-template-columns:1fr} table.list .hide-m{display:none}}
+</style>
+</head>
+<body>
+<!--
+  Panel de profes del OET Full Mock Test (v1, 25/09/2026, pedido de Diana).
+  Diana (info@) y Liza (clearpath@) entran con la MISMA cuenta del panel de Speaking.
+  Crear estudiante = genera el código y le manda el correo con el link (mock-admin).
+-->
+<header class="topbar">
+  <img src="https://assessment.speakeasy.lat/assets/logo-speakeasy-clearpath.png" alt="Speak Easy · ClearPath" class="logo">
+  <div class="topinfo"><div class="section-label">Panel · OET Full Mock Test</div><button id="logoutBtn" class="btn ghost hidden" style="padding:6px 12px">Salir</button></div>
+</header>
+<main class="wrap" id="app"><div class="card center"><p>Cargando…</p></div></main>
+<div id="toast" class="toast hidden"></div>
+<footer class="foot">OET Prep · ClearPath · Speak Easy Online</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function () {
+  const URL_ = 'https://qqdxmmvhthwcqhgmvyic.supabase.co';
+  const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFxZHhtbXZodGh3Y3FoZ212eWljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM0MzY3NDQsImV4cCI6MjA5OTAxMjc0NH0.iP5BTeUjw8FnElgQzp9r1-iSR-B9USVMcKGRs-Yh8GA';
+  const sb = supabase.createClient(URL_, ANON);
+  const $app = document.getElementById('app');
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const fdate = (d) => d ? new Date(d).toLocaleString('es-CO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+  function toast(m) { const t = document.getElementById('toast'); t.textContent = m; t.classList.remove('hidden'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.add('hidden'), 3500); }
+
+  async function call(body) {
+    const { data } = await sb.auth.getSession();
+    const token = data.session && data.session.access_token;
+    if (!token) { renderLogin(); throw new Error('Sesión vencida.'); }
+    const res = await fetch(URL_ + '/functions/v1/mock-admin', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token, apikey: ANON }, body: JSON.stringify(body) });
+    const j = await res.json().catch(() => ({}));
+    if (res.status === 401) { await sb.auth.signOut(); renderLogin('Tu sesión venció. Vuelve a entrar.'); throw new Error('401'); }
+    if (!res.ok) throw new Error(j.error || 'Error. Intenta de nuevo.');
+    return j;
+  }
+
+  function renderLogin(err) {
+    document.getElementById('logoutBtn').classList.add('hidden');
+    $app.innerHTML = `<div class="card" style="max-width:420px;margin:30px auto">
+      <h1>Entrar al panel</h1><p class="muted small">Usa la misma cuenta del panel de Speaking.</p>
+      <div class="field"><label>Correo</label><input type="text" id="em" autocomplete="username"></div>
+      <div class="field" style="margin-top:10px"><label>Contraseña</label><input type="password" id="pw" autocomplete="current-password" style="width:100%;font:inherit;border:1px solid #b9d3da;border-radius:8px;padding:7px 10px"></div>
+      <button class="btn primary" id="inBtn" style="width:100%;margin-top:14px">Entrar</button>
+      ${err ? `<p class="err">${esc(err)}</p>` : ''}</div>`;
+    const go = async () => {
+      const { error } = await sb.auth.signInWithPassword({ email: document.getElementById('em').value.trim(), password: document.getElementById('pw').value });
+      if (error) return renderLogin('Correo o contraseña incorrectos.');
+      renderPanel();
+    };
+    document.getElementById('inBtn').onclick = go;
+    document.getElementById('pw').onkeydown = (e) => { if (e.key === 'Enter') go(); };
+  }
+
+  function statusOf(s) {
+    if (!s.status) return s.invite_sent_at ? 'Invitada, sin empezar' : 'Creada, sin empezar';
+    if (s.status === 'completed') return 'Completo (reporte final enviado)';
+    if (s.status === 'written_complete') return s.speaking_status === 'completed' ? 'Speaking cargado' : 'Parte escrita lista · Speaking pendiente';
+    const names = { listening: 'Listening', reading_a: 'Reading A', reading_bc: 'Reading B+C', writing: 'Writing' };
+    return s.running ? 'Haciendo ' + (names[s.running] || s.running) : `En curso (${s.sections_done}/4 partes)`;
+  }
+
+  async function renderPanel() {
+    document.getElementById('logoutBtn').classList.remove('hidden');
+    $app.innerHTML = `
+      <div class="card">
+        <h2>Nueva estudiante</h2>
+        <p class="muted small">Se crea su código y le llega un correo con el link del mock test.</p>
+        <div class="grid2">
+          <div class="field"><label>Nombre completo</label><input type="text" id="nm" autocomplete="off"></div>
+          <div class="field"><label>Correo de la estudiante</label><input type="text" id="ml" autocomplete="off"></div>
+        </div>
+        <div class="actions"><button class="btn primary" id="crBtn">Crear y enviar correo</button></div>
+        <div id="crOut"></div>
+      </div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h2 style="margin:0">Estudiantes</h2><button class="btn ghost" id="rfBtn">Actualizar</button></div>
+        <div id="list" style="margin-top:12px"><p class="muted">Cargando…</p></div>
+      </div>`;
+    document.getElementById('crBtn').onclick = async () => {
+      const btn = document.getElementById('crBtn'); const out = document.getElementById('crOut');
+      btn.disabled = true; out.innerHTML = '';
+      try {
+        const r = await call({ action: 'create', full_name: document.getElementById('nm').value, email: document.getElementById('ml').value });
+        out.innerHTML = `<div class="ok"><b>${esc(r.full_name)}</b> · código <span class="code">${esc(r.access_code)}</span><br>
+          <a href="${esc(r.link)}" target="_blank">${esc(r.link)}</a> <button class="linkbtn" id="cpBtn">Copiar link</button><br>
+          ${r.emailed ? 'Correo enviado ✓' : `<span class="err">El correo no salió (${esc(r.email_error || '')}). Copia el link y envíaselo tú.</span>`}</div>`;
+        document.getElementById('cpBtn').onclick = () => navigator.clipboard.writeText(r.link).then(() => toast('Link copiado'));
+        document.getElementById('nm').value = ''; document.getElementById('ml').value = '';
+        loadList();
+      } catch (e) { out.innerHTML = `<p class="err">${esc(e.message)}</p>`; }
+      btn.disabled = false;
+    };
+    document.getElementById('rfBtn').onclick = loadList;
+    loadList();
+  }
+
+  async function loadList() {
+    const box = document.getElementById('list');
+    try {
+      const r = await call({ action: 'list' });
+      if (!r.students.length) { box.innerHTML = '<p class="muted">Todavía no hay estudiantes.</p>'; return; }
+      box.innerHTML = `<table class="list"><thead><tr><th>Estudiante</th><th>Código</th><th>Estado</th><th class="hide-m">Reportes</th><th></th></tr></thead><tbody>
+        ${r.students.map((s) => `<tr>
+          <td><b>${esc(s.full_name)}</b><br><span class="muted small">${esc(s.email || '')}</span></td>
+          <td><span class="code">${esc(s.access_code)}</span><br><span class="muted small">creado ${fdate(s.created_at)}</span></td>
+          <td>${esc(statusOf(s))}</td>
+          <td class="hide-m small">${s.partial_drive_url ? `<a href="${esc(s.partial_drive_url)}" target="_blank">Parcial</a>` : (s.partial_report_sent_at ? 'Parcial ✓' : '')}
+            ${s.final_drive_url ? ` · <a href="${esc(s.final_drive_url)}" target="_blank">Final</a>` : (s.report_sent_at ? ' · Final ✓' : '')}</td>
+          <td><button class="linkbtn" data-code="${esc(s.access_code)}">Reenviar correo</button></td></tr>`).join('')}
+        </tbody></table>`;
+      box.querySelectorAll('[data-code]').forEach((b) => (b.onclick = async () => {
+        b.disabled = true;
+        try { await call({ action: 'resend', access_code: b.dataset.code }); toast('Correo reenviado ✓'); } catch (e) { toast(e.message); }
+        b.disabled = false;
+      }));
+    } catch (e) { if (e.message !== '401') box.innerHTML = `<p class="err">${esc(e.message)}</p>`; }
+  }
+
+  document.getElementById('logoutBtn').onclick = async () => { await sb.auth.signOut(); renderLogin(); };
+  sb.auth.getSession().then(({ data }) => (data.session ? renderPanel() : renderLogin()));
+})();
+</script>
+</body>
+</html>
