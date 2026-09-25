@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OET Full Mock Test · ClearPath</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/mock.css">
+<link rel="icon" href="data:,">
+</head>
+<body>
+<!--
+  OET Full Mock Test (mocktest.speakeasy.lat) — v1, 25/09/2026, pedido de Diana.
+  Sitio SEPARADO del Assessment 360. Habla solo con las Edge Functions mock-api y
+  (indirectamente) mock-report, que leen el esquema `mock` de Supabase.
+  Link para la estudiante: https://mocktest.speakeasy.lat/?code=OETF-XXXXX
+-->
+<header class="topbar">
+  <img src="https://assessment.speakeasy.lat/assets/logo-speakeasy-clearpath.png" alt="Speak Easy · ClearPath" class="logo">
+  <div class="topinfo">
+    <div id="sectionLabel" class="section-label"></div>
+    <div id="timerBox" class="timer hidden"><span id="timerCaption">Tiempo</span> <b id="timerValue">--:--</b></div>
+  </div>
+</header>
+
+<main id="app" class="wrap">
+  <div class="card center"><p>Cargando…</p></div>
+</main>
+
+<div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+  <div class="modal-box">
+    <p id="modalText"></p>
+    <div class="modal-actions">
+      <button id="modalCancel" class="btn ghost">Cancelar</button>
+      <button id="modalOk" class="btn primary">Sí, continuar</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+<footer class="foot">OET Prep · ClearPath · Speak Easy Online</footer>
+<script src="js/mock.js"></script>
+</body>
+</html>
