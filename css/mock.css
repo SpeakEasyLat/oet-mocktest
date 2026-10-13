@@ -92,3 +92,11 @@ table.data td{border-bottom:1px solid var(--line);padding:6px 8px;vertical-align
   .notes .h{padding:6px 12px}
   .logo{height:32px}
 }
+
+/* v2 (12/10/2026): Reading B+C, navegación más visible */
+.bcnote{background:var(--tint-2);border-left:4px solid var(--teal-700);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:14px;color:var(--teal-900)}
+.bctabs{padding:4px 0}
+.bctabs .tab{font-size:15px;padding:9px 16px}
+.tab .cnt{display:inline-block;margin-left:6px;font-size:12px;font-weight:700;padding:1px 7px;border-radius:10px;background:#fff;color:var(--teal-900)}
+.tab.on .cnt{background:rgba(255,255,255,.25);color:#fff}
+.tab.full .cnt{background:#2e7d32;color:#fff}
