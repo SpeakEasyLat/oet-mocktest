@@ -206,6 +206,24 @@
     });
     return Object.entries(out).map(([n, v]) => ({ number: Number(n), answer: v }));
   }
+  // v2 (12/10/2026): aviso de preguntas sin responder antes de entregar.
+  function unanswered() {
+    const all = new Set(); const done = new Set();
+    document.querySelectorAll('[data-q]').forEach((el) => all.add(Number(el.dataset.q)));
+    allAnswers().forEach((a) => { if (String(a.answer || '').trim()) done.add(a.number); });
+    return [...all].filter((n) => !done.has(n)).sort((a, b) => a - b);
+  }
+  function ranges(ns) {
+    const out = []; let a = null, b = null;
+    for (const n of ns) { if (a === null) { a = b = n; } else if (n === b + 1) { b = n; } else { out.push(a === b ? `${a}` : `${a}–${b}`); a = b = n; } }
+    if (a !== null) out.push(a === b ? `${a}` : `${a}–${b}`);
+    return out.join(', ');
+  }
+  function missLabel(ns, section) {
+    if (section !== 'reading_bc') return 'preguntas ' + ranges(ns);
+    const b = ns.filter((n) => n <= 6), c = ns.filter((n) => n > 6);
+    return [b.length ? 'Part B: ' + ranges(b) : '', c.length ? 'Part C: ' + ranges(c) : ''].filter(Boolean).join(' · ');
+  }
   async function flush() {
     if (!S.run || S.finishing) return;
     const keys = Object.keys(S.dirty);
@@ -224,7 +242,10 @@
     if (!S.run || S.finishing) return;
     const section = S.run.section;
     if (!auto) {
-      const ok = await confirmBox('¿Seguro que quieres entregar esta parte? Después ya no puedes volver a ella.');
+      const miss = section === 'writing' || section === 'listening' ? [] : unanswered();
+      const ok = await confirmBox(miss.length
+        ? `Te falta${miss.length === 1 ? '' : 'n'} ${miss.length} pregunta${miss.length === 1 ? '' : 's'} sin responder (${missLabel(miss, section)}). ¿Seguro que quieres entregar? Después ya no puedes volver a esta parte.`
+        : '¿Seguro que quieres entregar esta parte? Después ya no puedes volver a ella.');
       if (!ok) return;
     }
     S.finishing = true; clearLoops(); stopAudio();
@@ -376,14 +397,24 @@
   }
 
   // ------------------------------------------------------------------ READING B+C
+  // v2 (12/10/2026): nadie llegaba a Part C (estaba en pestañas y el botón de entregar
+  // salía al final de Part B). Ahora: botón "Siguiente", entregar solo en el último texto,
+  // pestañas con contador de respondidas.
   function renderReadingBC(r) {
     setHeader('Reading · Parts B & C', true);
     const c = r.content;
-    const views = [{ key: 'B', label: 'Part B' }, ...c.part_c.map((t, i) => ({ key: 'C' + i, label: 'Part C · Text ' + (i + 1) }))];
+    const views = [
+      { key: 'B', label: 'Part B', nums: c.part_b.map((q) => q.number) },
+      ...c.part_c.map((t, i) => ({ key: 'C' + i, label: 'Part C · Text ' + (i + 1), nums: t.questions.map((q) => q.number) })),
+    ];
     $app.innerHTML = `
-      <div class="tabs" id="tabs">${views.map((v, i) => `<button class="tab ${i ? '' : 'on'}" data-k="${v.key}">${esc(v.label)}</button>`).join('')}</div>
+      <div class="bcnote">Esta parte tiene <b>${views.length} secciones</b>: Part B (preguntas 1–6) y Part C (${c.part_c.length} textos largos, preguntas 7–${views[views.length - 1].nums.slice(-1)[0]}). Muévete con las pestañas o con el botón <b>Siguiente</b>. El tiempo es para todo junto.</div>
+      <div class="tabs bctabs" id="tabs">${views.map((v, i) => `<button class="tab ${i ? '' : 'on'}" data-k="${v.key}">${esc(v.label)} <span class="cnt" data-cnt="${v.key}"></span></button>`).join('')}</div>
       <div id="viewB"></div>${c.part_c.map((_, i) => `<div id="viewC${i}" class="hidden"></div>`).join('')}
-      <div class="actions"><span id="saveInfo" class="save"></span><button class="btn primary" id="doneBtn">Entregar Reading</button></div>`;
+      <div class="actions"><span id="saveInfo" class="save"></span>
+        <button class="btn ghost" id="prevBtn">← Anterior</button>
+        <button class="btn primary" id="nextBtn"></button>
+        <button class="btn primary" id="doneBtn">Entregar Reading</button></div>`;
     document.getElementById('viewB').innerHTML = `<div class="card"><div class="band">Part B · Questions 1–6</div>
       <p class="small muted">In each of questions 1–6, there is an extract from a text found in a healthcare workplace. Choose the answer (A, B or C) which you think fits best according to the text.</p>
       ${c.part_b.map((q) => `<div class="extract"><h4>${esc(q.title)}</h4><p>${esc(q.text)}</p>${mcqHtml(q)}</div>`).join('')}</div>`;
@@ -393,13 +424,35 @@
         <div class="pane"><div class="band">Questions ${t.questions[0].number}–${t.questions[t.questions.length - 1].number}</div>
         <p class="small muted">Choose the answer (A, B, C or D) which you think fits best according to the text.</p>${t.questions.map((q) => mcqHtml(q)).join('')}</div></div>`;
     });
-    document.querySelectorAll('#tabs .tab').forEach((b) => (b.onclick = () => {
-      document.querySelectorAll('#tabs .tab').forEach((x) => x.classList.toggle('on', x === b));
-      document.getElementById('viewB').classList.toggle('hidden', b.dataset.k !== 'B');
-      c.part_c.forEach((_, i) => document.getElementById('viewC' + i).classList.toggle('hidden', b.dataset.k !== 'C' + i));
+    let cur = 0;
+    const show = (idx) => {
+      cur = idx;
+      views.forEach((v, i) => {
+        document.getElementById('view' + v.key).classList.toggle('hidden', i !== idx);
+        document.querySelector(`#tabs .tab[data-k="${v.key}"]`).classList.toggle('on', i === idx);
+      });
+      const last = idx === views.length - 1;
+      document.getElementById('prevBtn').classList.toggle('hidden', idx === 0);
+      document.getElementById('nextBtn').classList.toggle('hidden', last);
+      document.getElementById('doneBtn').classList.toggle('hidden', !last);
+      if (!last) document.getElementById('nextBtn').textContent = `Siguiente: ${views[idx + 1].label} →`;
       window.scrollTo({ top: 0 });
-    }));
+    };
+    const counts = () => {
+      const ans = new Set(allAnswers().filter((a) => String(a.answer || '').trim()).map((a) => a.number));
+      views.forEach((v) => {
+        const n = v.nums.filter((x) => ans.has(x)).length;
+        const el = document.querySelector(`[data-cnt="${v.key}"]`);
+        el.textContent = `${n}/${v.nums.length}`;
+        el.parentElement.classList.toggle('full', n === v.nums.length);
+      });
+    };
+    document.querySelectorAll('#tabs .tab').forEach((b, i) => (b.onclick = () => show(i)));
+    document.getElementById('prevBtn').onclick = () => show(Math.max(0, cur - 1));
+    document.getElementById('nextBtn').onclick = () => show(Math.min(views.length - 1, cur + 1));
     bindInputs($app); prefill(r.saved_answers);
+    $app.addEventListener('change', counts);
+    counts(); show(0);
     document.getElementById('doneBtn').onclick = () => finish(false);
   }
 
