@@ -269,13 +269,16 @@
   }
 
   // ------------------------------------------------------------------ LISTENING
-  const audio = new Audio();
-  audio.preload = 'auto';
+  // v5: dos elementos de audio; el siguiente track se precarga ~8 s antes para que arranque
+  // desde el segundo 0 (antes la latencia de carga hacía que empezara "mochado").
+  const audios = [new Audio(), new Audio()];
+  audios.forEach((a) => { a.preload = 'auto'; });
+  let audio = audios[0];
   let curTrack = null; let loadingTrack = null; let audioRetryAt = 0;
   function unlockAudio() {
-    try { audio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA='; audio.play().catch(() => {}); } catch { /* nada */ }
+    audios.forEach((a) => { try { a.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA='; a.play().catch(() => {}); } catch { /* nada */ } });
   }
-  function stopAudio() { try { audio.pause(); } catch { /* nada */ } curTrack = null; }
+  function stopAudio() { curTrack = null; audios.forEach((a) => { try { a.pause(); } catch { /* nada */ } }); }
 
   function listeningPartHtml(part) {
     if (part.part === 'A') {
@@ -315,7 +318,7 @@
     resumeBtn.onclick = () => {
       if (!pendingTrack) { resumeBtn.classList.add('hidden'); return; }
       const el = (now() - started) / 1000 - pendingTrack.starts_at_offset;
-      try { audio.currentTime = Math.max(0, Math.min(el, pendingTrack.duration - 0.5)); } catch { /* nada */ }
+      try { if (el > 1.5) audio.currentTime = Math.min(el, pendingTrack.duration - 0.5); } catch { /* nada */ }
       audio.play().then(() => { resumeBtn.classList.add('hidden'); pendingTrack = null; }).catch(() => toast('Revisa que el navegador permita reproducir audio.'));
     };
 
@@ -330,27 +333,35 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
-    async function playTrack(t, elapsedInTrack) {
-      if (loadingTrack === t.track_no || Date.now() < audioRetryAt) return;
+    const prepared = {};
+    async function prepTrack(t) {
+      if (prepared[t.track_no] || loadingTrack === t.track_no || Date.now() < audioRetryAt) return;
       loadingTrack = t.track_no;
       try {
         const a = await api('audio', { track_no: t.track_no });
-        if (a.ended) { curTrack = t.track_no; return; }
-        audio.src = a.url;
-        audio.onloadedmetadata = () => {
-          const el = (now() - started) / 1000 - t.starts_at_offset;
-          try { audio.currentTime = Math.max(0, Math.min(el, t.duration - 0.5)); } catch { /* nada */ }
-        };
-        curTrack = t.track_no;
-        await audio.play().catch(() => { pendingTrack = t; resumeBtn.classList.remove('hidden'); });
+        if (a.ended) { prepared[t.track_no] = { ended: true }; return; }
+        const el = audios[t.track_no % 2];
+        el.src = a.url; el.load();
+        prepared[t.track_no] = { el };
       } catch (e) {
-        toast(e.message, 4000); curTrack = null; audioRetryAt = Date.now() + 5000;
+        toast(e.message, 4000); audioRetryAt = Date.now() + 5000;
       } finally { loadingTrack = null; }
+    }
+    function startTrack(t) {
+      const p = prepared[t.track_no];
+      curTrack = t.track_no;
+      if (!p || p.ended) return;
+      const prev = audio; audio = p.el;
+      if (prev !== audio) { try { prev.pause(); } catch { /* nada */ } }
+      // Solo se salta hacia adelante si se entra con el track ya avanzado (p. ej. al recargar la página).
+      const sync = () => { const el = (now() - started) / 1000 - t.starts_at_offset; if (el > 6) { try { audio.currentTime = Math.min(el, t.duration - 0.5); } catch { /* nada */ } } };
+      if (audio.readyState >= 1) sync(); else audio.addEventListener('loadedmetadata', sync, { once: true });
+      audio.play().catch(() => { pendingTrack = t; resumeBtn.classList.remove('hidden'); });
     }
 
     const loop = () => {
       const el = (now() - started) / 1000;
-      if (el >= total + 2) { finish(true); return; }
+      if (el >= total + 2 && (audio.paused || audio.ended || el >= total + 12)) { finish(true); return; }
       let idx = tracks.findIndex((t) => el < t.starts_at_offset + t.duration);
       if (idx < 0) idx = tracks.length - 1;
       const t = tracks[idx];
@@ -360,10 +371,14 @@
       document.getElementById('trkLabel').textContent = `Audio ${t.track_no} de ${tracks.length} · ${t.label}`;
       document.getElementById('trkBar').style.width = Math.max(0, Math.min(100, (inTrack / t.duration) * 100)) + '%';
       document.getElementById('trkTime').textContent = inTrack < 0 ? 'empieza en ' + fmt(-inTrack) : fmt(inTrack) + ' / ' + fmt(t.duration);
-      if (inTrack >= -1 && inTrack < t.duration - 1 && curTrack !== t.track_no && !pendingTrack) playTrack(t, inTrack);
+      if (inTrack >= -8 && inTrack < t.duration - 1) prepTrack(t);
+      if (inTrack >= -0.3 && inTrack < t.duration - 1 && curTrack !== t.track_no && !pendingTrack && prepared[t.track_no]) {
+        const busy = curTrack && !audio.paused && !audio.ended;
+        if (!busy || inTrack > 6) startTrack(t);
+      }
     };
     // Evita que se pause con las teclas de medios.
-    audio.onpause = () => { if (curTrack && !S.finishing && audio.currentTime < (audio.duration || 1e9) - 1) audio.play().catch(() => { pendingTrack = tracks.find((x) => x.track_no === curTrack) || null; resumeBtn.classList.remove('hidden'); }); };
+    audios.forEach((a) => { a.onpause = () => { if (a !== audio || !curTrack || S.finishing) return; if (a.currentTime < (a.duration || 1e9) - 1) a.play().catch(() => { pendingTrack = tracks.find((x) => x.track_no === curTrack) || null; resumeBtn.classList.remove('hidden'); }); }; });
     loop(); S.loops.push(setInterval(loop, 500));
   }
 
