@@ -12,7 +12,8 @@
 <style>
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   .field label{display:block;font-size:13px;font-weight:600;color:var(--teal-900);margin-bottom:4px}
-  .field input{width:100%}
+  .field input,.field select{width:100%}
+  .field select{padding:10px 12px;border:1px solid #cfe0e4;border-radius:10px;font:inherit;background:#fff}
   table.list{width:100%;border-collapse:collapse;font-size:14px}
   table.list th{background:var(--tint);color:var(--teal-900);text-align:left;padding:8px}
   table.list td{border-bottom:1px solid var(--line);padding:8px;vertical-align:top}
@@ -26,6 +27,7 @@
 <body>
 <!--
   Panel de profes del OET Full Mock Test (v1, 25/09/2026, pedido de Diana).
+  v2 (17/11/2026): selector de Mock test (Mock 1 / Mock 2) al crear estudiante; columna de test en la lista.
   Diana (info@) y Liza (clearpath@) entran con la MISMA cuenta del panel de Speaking.
   Crear estudiante = genera el código y le manda el correo con el link (mock-admin).
 -->
@@ -90,6 +92,7 @@
       <div class="card">
         <h2>Nueva estudiante</h2>
         <p class="muted small">Se crea su código y le llega un correo con el link del mock test.</p>
+        <div class="field"><label>Mock test</label><select id="tst"><option value="">Cargando…</option></select></div>
         <div class="grid2">
           <div class="field"><label>Nombre completo</label><input type="text" id="nm" autocomplete="off"></div>
           <div class="field"><label>Correo de la estudiante</label><input type="text" id="ml" autocomplete="off"></div>
@@ -105,7 +108,7 @@
       const btn = document.getElementById('crBtn'); const out = document.getElementById('crOut');
       btn.disabled = true; out.innerHTML = '';
       try {
-        const r = await call({ action: 'create', full_name: document.getElementById('nm').value, email: document.getElementById('ml').value });
+        const r = await call({ action: 'create', test_id: document.getElementById('tst').value, full_name: document.getElementById('nm').value, email: document.getElementById('ml').value });
         out.innerHTML = `<div class="ok"><b>${esc(r.full_name)}</b> · código <span class="code">${esc(r.access_code)}</span><br>
           <a href="${esc(r.link)}" target="_blank">${esc(r.link)}</a> <button class="linkbtn" id="cpBtn">Copiar link</button><br>
           ${r.emailed ? 'Correo enviado ✓' : `<span class="err">El correo no salió (${esc(r.email_error || '')}). Copia el link y envíaselo tú.</span>`}</div>`;
@@ -123,11 +126,17 @@
     const box = document.getElementById('list');
     try {
       const r = await call({ action: 'list' });
+      const sel = document.getElementById('tst');
+      if (sel && Array.isArray(r.tests) && r.tests.length && !sel.dataset.ok) {
+        sel.innerHTML = r.tests.map((t) => `<option value="${esc(t.id)}">${esc(t.title)}</option>`).join('');
+        sel.value = r.tests[r.tests.length - 1].id; sel.dataset.ok = '1';
+      }
+      const tname = (id) => ((r.tests || []).find((t) => t.id === id) || {}).short || id || '';
       if (!r.students.length) { box.innerHTML = '<p class="muted">Todavía no hay estudiantes.</p>'; return; }
       box.innerHTML = `<table class="list"><thead><tr><th>Estudiante</th><th>Código</th><th>Estado</th><th class="hide-m">Reportes</th><th></th></tr></thead><tbody>
         ${r.students.map((s) => `<tr>
           <td><b>${esc(s.full_name)}</b><br><span class="muted small">${esc(s.email || '')}</span></td>
-          <td><span class="code">${esc(s.access_code)}</span><br><span class="muted small">creado ${fdate(s.created_at)}</span></td>
+          <td><span class="code">${esc(s.access_code)}</span><br><span class="muted small">${esc(tname(s.test_id))} · creado ${fdate(s.created_at)}</span></td>
           <td>${esc(statusOf(s))}</td>
           <td class="hide-m small">${s.partial_drive_url ? `<a href="${esc(s.partial_drive_url)}" target="_blank">Parcial</a>` : (s.partial_report_sent_at ? 'Parcial ✓' : '')}
             ${s.final_drive_url ? ` · <a href="${esc(s.final_drive_url)}" target="_blank">Final</a>` : (s.report_sent_at ? ' · Final ✓' : '')}</td>
