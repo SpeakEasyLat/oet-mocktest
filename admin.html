@@ -79,7 +79,7 @@
   }
 
   function statusOf(s) {
-    if (!s.status) return s.invite_sent_at ? 'Invitada, sin empezar' : 'Creada, sin empezar';
+    if (!s.status) return s.invite_sent_at ? 'Invitado, sin empezar' : 'Creado, sin empezar';
     if (s.status === 'completed') return 'Completo (reporte final enviado)';
     if (s.status === 'written_complete') return s.speaking_status === 'completed' ? 'Speaking cargado' : 'Parte escrita lista · Speaking pendiente';
     const names = { listening: 'Listening', reading_a: 'Reading A', reading_bc: 'Reading B+C', writing: 'Writing' };
@@ -90,12 +90,12 @@
     document.getElementById('logoutBtn').classList.remove('hidden');
     $app.innerHTML = `
       <div class="card">
-        <h2>Nueva estudiante</h2>
+        <h2>Nuevo estudiante</h2>
         <p class="muted small">Se crea su código y le llega un correo con el link del mock test.</p>
         <div class="field"><label>Mock test</label><select id="tst"><option value="">Cargando…</option></select></div>
         <div class="grid2">
           <div class="field"><label>Nombre completo</label><input type="text" id="nm" autocomplete="off"></div>
-          <div class="field"><label>Correo de la estudiante</label><input type="text" id="ml" autocomplete="off"></div>
+          <div class="field"><label>Correo del estudiante</label><input type="text" id="ml" autocomplete="off"></div>
         </div>
         <div class="actions"><button class="btn primary" id="crBtn">Crear y enviar correo</button></div>
         <div id="crOut"></div>
